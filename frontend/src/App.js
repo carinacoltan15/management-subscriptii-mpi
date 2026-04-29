@@ -54,7 +54,7 @@ export default function App() {
     // Filtrăm orice date care nu au nume sau preț (pentru a nu mai vedea rânduri goale)
     const dateValide = data.filter(s => s.name && s.price);
     
-    const culoriGradients = ['#4361ee', '#3f37c9', '#4895ef', '#4cc9f0', '#f72585', '#b5179e'];
+    const culoriGradients = ['#4361ee', '#e74c3c', '#9b59b6','#f8ff6b', '#4cc9f0', '#f72585', '#b5179e'];
     const dateCuCulori = dateValide.map((s, index) => ({
       ...s,
       color: culoriGradients[index % culoriGradients.length]
@@ -115,7 +115,10 @@ export default function App() {
         method: 'DELETE'
       });
       if (response.ok) {
+        setOpenAlert(true);
         incarcaDate();
+      } else {
+        alert("Eroare la ștergere. Serverul a răspuns cu o problemă.");
       }
     } catch (error) {
       console.error("Eroare la ștergere:", error);
