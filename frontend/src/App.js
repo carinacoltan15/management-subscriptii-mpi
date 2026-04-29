@@ -1,17 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Box, AppBar, Toolbar, Typography, Container, Paper, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, Button, Grid, TextField, Card, CardContent,
   IconButton, MenuItem, Select, FormControl, InputLabel, LinearProgress,
-  Snackbar, Alert, Chip, InputAdornment, createTheme, ThemeProvider, CssBaseline,
+  Snackbar, Alert, Chip, createTheme, ThemeProvider, CssBaseline,
   Divider, Stack
 } from '@mui/material';
 import { 
   Add as AddIcon, Delete as DeleteIcon, Brightness4, Brightness7, 
-  Category as CategoryIcon, AccountBalance as BudgetIcon, Warning as WarningIcon,
-  Label as LabelIcon, RocketLaunch
+  Category as CategoryIcon, AccountBalance as BudgetIcon, RocketLaunch
 } from '@mui/icons-material';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+
+// URL-ul de bază pentru backend-ul tău
+const API_URL = 'http://localhost:8080/api/subscriptions';
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(false);
@@ -33,12 +35,8 @@ export default function App() {
     shape: { borderRadius: 16 },
   }), [darkMode]);
 
-  // DATE ȘI STATE-URI
-  const [subscriptii, setSubscriptii] = useState([
-    { id: 1, nume: 'Netflix', pret: 50, categorie: 'Entertainment', color: '#4361ee' },
-    { id: 2, nume: 'Spotify', pret: 25, categorie: 'Music', color: '#4cc9f0' }
-  ]);
-
+  // STATE-URI PENTRU DATE
+  const [subscriptii, setSubscriptii] = useState([]);
   const [categorii, setCategorii] = useState(['Entertainment', 'Music', 'Shopping', 'Cloud/Tech']);
   const [categorieNouaInput, setCategorieNouaInput] = useState('');
   const [buget, setBuget] = useState(250);
@@ -47,6 +45,33 @@ export default function App() {
   const [categorieSelectata, setCategorieSelectata] = useState('Entertainment');
   const [openAlert, setOpenAlert] = useState(false);
 
+  // 1. FUNCȚIE: ÎNCĂRCARE DATE DIN BACKEND
+  const incarcaDate = async () => {
+  try {
+    const response = await fetch(API_URL);
+    const data = await response.json();
+    
+    // Filtrăm orice date care nu au nume sau preț (pentru a nu mai vedea rânduri goale)
+    const dateValide = data.filter(s => s.name && s.price);
+    
+    const culoriGradients = ['#4361ee', '#e74c3c', '#9b59b6','#f8ff6b', '#4cc9f0', '#f72585', '#b5179e'];
+    const dateCuCulori = dateValide.map((s, index) => ({
+      ...s,
+      color: culoriGradients[index % culoriGradients.length]
+    }));
+    
+    setSubscriptii(dateCuCulori);
+  } catch (error) {
+    console.error("Eroare la încărcare:", error);
+  }
+};
+
+  // Apelăm încărcarea la prima deschidere a paginii
+  useEffect(() => {
+    incarcaDate();
+  }, []);
+
+  // 2. FUNCȚIE: ADĂUGARE CATEGORIE (Local)
   const adaugaCategorie = () => {
     if (categorieNouaInput && !categorii.includes(categorieNouaInput)) {
       setCategorii([...categorii, categorieNouaInput]);
@@ -54,23 +79,53 @@ export default function App() {
     }
   };
 
-  const adaugaSubscriptie = () => {
-    if (numeNou && pretNou) {
-      const culoriGradients = ['#4361ee', '#3f37c9', '#4895ef', '#4cc9f0', '#f72585', '#b5179e'];
-      const nouaSub = {
-        id: Date.now(),
-        nume: numeNou,
-        pret: parseFloat(pretNou),
-        categorie: categorieSelectata,
-        color: culoriGradients[Math.floor(Math.random() * culoriGradients.length)]
-      };
-      setSubscriptii([...subscriptii, nouaSub]);
-      setNumeNou(''); setPretNou('');
-      setOpenAlert(true);
+  // 3. FUNCȚIE: ADĂUGARE SUBSCRIPȚIE (Trimitere la Backend)
+  const adaugaSubscriptie = async () => {
+  if (numeNou && pretNou) {
+    const nouaSub = {
+      name: numeNou,       // AM SCHIMBAT nume -> name
+      price: parseFloat(pretNou), // AM SCHIMBAT pret -> price
+      category: categorieSelectata, // AM SCHIMBAT categorie -> category (dacă ai în Java)
+      currency: "RON"      // Adăugat pentru a se potrivi cu entitatea Java
+    };
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nouaSub)
+      });
+
+      if (response.ok) {
+        setNumeNou(''); 
+        setPretNou('');
+        setOpenAlert(true);
+        incarcaDate(); 
+      }
+    } catch (error) {
+      console.error("Eroare la salvarea subscripției:", error);
+    }
+  }
+};
+
+  // 4. FUNCȚIE: ȘTERGERE SUBSCRIPȚIE
+  const stergeSubscriptie = async (id) => {
+    try {
+      const response = await fetch(`${API_URL}/${id}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setOpenAlert(true);
+        incarcaDate();
+      } else {
+        alert("Eroare la ștergere. Serverul a răspuns cu o problemă.");
+      }
+    } catch (error) {
+      console.error("Eroare la ștergere:", error);
     }
   };
 
-  const totalLunar = subscriptii.reduce((sum, item) => sum + item.pret, 0);
+  const totalLunar = subscriptii.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
   const procentBuget = Math.min((totalLunar / buget) * 100, 100);
 
   return (
@@ -96,7 +151,6 @@ export default function App() {
             <Grid item xs={12} md={4}>
               <Stack spacing={3}>
                 
-                {/* CARD BUGET */}
                 <Card sx={{ 
                   borderRadius: 5, 
                   background: totalLunar > buget ? 'linear-gradient(135deg, #ef233c 0%, #d90429 100%)' : 'linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)',
@@ -109,7 +163,6 @@ export default function App() {
                   </CardContent>
                 </Card>
 
-                {/* MODIFICARE BUGET & CATEGORII */}
                 <Paper sx={{ p: 3, borderRadius: 5 }}>
                   <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 700, display: 'flex', alignItems: 'center' }}>
                     <BudgetIcon fontSize="small" sx={{ mr: 1 }} /> Setări Buget
@@ -130,7 +183,6 @@ export default function App() {
                   </Box>
                 </Paper>
 
-                {/* ADĂUGARE SUBSCRIPȚIE */}
                 <Paper sx={{ p: 3, borderRadius: 5 }}>
                   <Typography variant="h6" gutterBottom>Adaugă Serviciu</Typography>
                   <Stack spacing={2}>
@@ -164,14 +216,23 @@ export default function App() {
                   <TableBody>
                     {subscriptii.map((row) => (
                       <TableRow key={row.id} hover>
-                        <TableCell sx={{ fontWeight: 600 }}>{row.nume}</TableCell>
-                        <TableCell><Chip label={row.categorie} size="small" sx={{ fontWeight: 700, bgcolor: `${row.color}20`, color: row.color }} /></TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 700 }}>{row.pret} RON</TableCell>
-                        <TableCell align="center">
-                          <IconButton size="small" color="error" onClick={() => setSubscriptii(subscriptii.filter(s => s.id !== row.id))}><DeleteIcon fontSize="small" /></IconButton>
-                        </TableCell>
-                      </TableRow>
+<TableCell sx={{ fontWeight: 600 }}>{row.name}</TableCell>
+  <TableCell>
+    <Chip label={row.category} size="small" sx={{ fontWeight: 700, bgcolor: `${row.color}20`, color: row.color }} />
+  </TableCell>
+  <TableCell align="right" sx={{ fontWeight: 700 }}>{row.price} RON</TableCell>
+  <TableCell align="center">
+    <IconButton size="small" color="error" onClick={() => stergeSubscriptie(row.id)}>
+      <DeleteIcon fontSize="small" />
+    </IconButton>
+  </TableCell>
+</TableRow>
                     ))}
+                    {subscriptii.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} align="center" sx={{ py: 3, opacity: 0.5 }}>Nicio subscripție găsită. Adaugă una!</TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -180,7 +241,7 @@ export default function App() {
                 <Typography variant="h6" sx={{ mb: 4 }}>Analiză vizuală</Typography>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={subscriptii} dataKey="pret" nameKey="nume" cx="50%" cy="50%" innerRadius={70} outerRadius={100} paddingAngle={5}>
+                    <Pie data={subscriptii} dataKey="price" nameKey="name" cx="50%" cy="50%" innerRadius={70} outerRadius={100} paddingAngle={5}>
                       {subscriptii.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />)}
                     </Pie>
                     <Tooltip />
@@ -194,7 +255,7 @@ export default function App() {
         </Container>
 
         <Snackbar open={openAlert} autoHideDuration={2000} onClose={() => setOpenAlert(false)}>
-          <Alert severity="success" variant="filled">Actualizat!</Alert>
+          <Alert severity="success" variant="filled">Actualizat cu succes în baza de date!</Alert>
         </Snackbar>
       </Box>
     </ThemeProvider>
